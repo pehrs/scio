@@ -51,7 +51,8 @@ val commonsTextVersion = "1.8"
 val datastoreV1ProtoClientVersion = "1.6.3"
 val elasticsearch2Version = "2.4.6"
 val elasticsearch5Version = "5.6.16"
-val elasticsearch6Version = "6.8.7"
+val elasticsearch6Version = "6.6.1"
+// val elasticsearch6Version = "6.8.7"
 val elasticsearch7Version = "7.6.1"
 val featranVersion = "0.5.0"
 val flinkVersion = "1.9.2"
@@ -100,6 +101,7 @@ val sparkeyVersion = "3.0.1"
 val sparkVersion = "2.4.4"
 val tensorFlowVersion = "1.15.0"
 val zoltarVersion = "0.5.6"
+
 
 lazy val mimaSettings = Seq(
   mimaPreviousArtifacts :=
@@ -184,6 +186,7 @@ val commonSettings = Sonatype.sonatypeSettings ++ assemblySettings ++ Seq(
   javacOptions in (Compile, doc) := Seq("-source", "1.8"),
   // protobuf-lite is an older subset of protobuf-java and causes issues
   excludeDependencies += "com.google.protobuf" % "protobuf-lite",
+  test in ThisBuild := println("tests disabled"),
   resolvers += Resolver.sonatypeRepo("public"),
   testOptions in Test += Tests.Argument("-oD"),
   testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v"),
@@ -389,7 +392,7 @@ lazy val protobufSettings = Def.settings(
 
 lazy val root: Project = Project("scio", file("."))
   .settings(commonSettings)
-  .settings(noPublishSettings)
+  // .settings(noPublishSettings)
   .settings(
     aggregate in assembly := false
   )
@@ -800,6 +803,8 @@ lazy val `scio-elasticsearch6`: Project = project
   .settings(commonSettings)
   .settings(
     description := "Scio add-on for writing to Elasticsearch",
+    resolvers += "Elastic Release" at "https://artifacts.elastic.co/maven/",
+    resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository",
     libraryDependencies ++= Seq(
       "org.apache.beam" % "beam-vendor-guava-26_0-jre" % beamVendorVersion,
       "org.apache.beam" % "beam-sdks-java-core" % beamVersion,
@@ -807,6 +812,7 @@ lazy val `scio-elasticsearch6`: Project = project
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.elasticsearch" % "elasticsearch" % elasticsearch6Version,
       "org.elasticsearch" % "elasticsearch-x-content" % elasticsearch6Version,
+      "org.elasticsearch.client" % "x-pack-transport" % elasticsearch6Version,
       "org.elasticsearch.client" % "transport" % elasticsearch6Version
     )
   )
@@ -1001,7 +1007,7 @@ lazy val `scio-tensorflow`: Project = project
 lazy val `scio-schemas`: Project = project
   .in(file("scio-schemas"))
   .settings(commonSettings)
-  .settings(noPublishSettings)
+  // .settings(noPublishSettings)
   .settings(protobufSettings)
   .settings(
     description := "Avro/Proto schemas for testing",
@@ -1128,7 +1134,7 @@ lazy val `scio-jmh`: Project = project
   .in(file("scio-jmh"))
   .settings(commonSettings)
   .settings(macroSettings)
-  .settings(noPublishSettings)
+  // .settings(noPublishSettings)
   .settings(
     description := "Scio JMH Microbenchmarks",
     sourceDirectory in Jmh := (sourceDirectory in Test).value,

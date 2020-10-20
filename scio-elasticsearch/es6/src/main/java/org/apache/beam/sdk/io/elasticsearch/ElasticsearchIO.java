@@ -32,6 +32,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import javax.annotation.Nullable;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.GroupByKey;
 import org.apache.beam.sdk.transforms.PTransform;
@@ -60,6 +61,7 @@ import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
+import org.elasticsearch.xpack.client.PreBuiltXPackTransportClient;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,7 +122,7 @@ public class ElasticsearchIO {
      * Returns a transform for writing to Elasticsearch cluster.
      *
      * @param error applies given function if specified in case of Elasticsearch error with bulk
-     *     writes. Default behavior throws IOException.
+     *              writes. Default behavior throws IOException.
      */
     public static <T> Bound withError(ThrowingConsumer<BulkExecutionException> error) {
       return new Bound<>().withError(error);
@@ -134,10 +136,14 @@ public class ElasticsearchIO {
      * Returns a transform for writing to Elasticsearch cluster.
      *
      * @param maxRetries Maximum number of retries to attempt for saving any single chunk of bulk
-     *     requests to the Elasticsearch cluster.
+     *                   requests to the Elasticsearch cluster.
      */
     public static <T> Bound withMaxRetries(int maxRetries) {
       return new Bound<>().withMaxRetries(maxRetries);
+    }
+
+    public static <T> Bound enableSslAndAuthentication(boolean enableSslAndAuth) {
+      return new Bound<>().enableSslAndAuthentication(enableSslAndAuth);
     }
 
     /**
@@ -164,6 +170,9 @@ public class ElasticsearchIO {
       private final int maxRetries;
       private final Duration retryPause;
       private final ThrowingConsumer<BulkExecutionException> error;
+      private final boolean enableSslAndAuth;
+      private final String username;
+      private final String password;
 
       private Bound(
           final String clusterName,
@@ -174,7 +183,10 @@ public class ElasticsearchIO {
           final int maxBulkRequestSize,
           int maxRetries,
           Duration retryPause,
-          final ThrowingConsumer<BulkExecutionException> error) {
+          final ThrowingConsumer<BulkExecutionException> error,
+          final boolean enableSslAndAuth,
+          @Nullable final String username,
+          @Nullable final String password) {
         this.clusterName = clusterName;
         this.servers = servers;
         this.flushInterval = flushInterval;
@@ -184,6 +196,9 @@ public class ElasticsearchIO {
         this.maxRetries = maxRetries;
         this.retryPause = retryPause;
         this.error = error;
+        this.enableSslAndAuth = enableSslAndAuth;
+        this.username = username;
+        this.password = password;
       }
 
       Bound() {
@@ -196,7 +211,10 @@ public class ElasticsearchIO {
             CHUNK_SIZE,
             DEFAULT_RETRIES,
             DEFAULT_RETRY_PAUSE,
-            defaultErrorHandler());
+            defaultErrorHandler(),
+            false,
+            null,
+            null);
       }
 
       public Bound<T> withClusterName(String clusterName) {
@@ -209,7 +227,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withServers(InetSocketAddress[] servers) {
@@ -222,7 +243,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withFlushInterval(Duration flushInterval) {
@@ -235,7 +259,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withFunction(
@@ -249,7 +276,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withNumOfShard(long numOfShard) {
@@ -262,7 +292,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withError(ThrowingConsumer<BulkExecutionException> error) {
@@ -275,7 +308,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withMaxBulkRequestSize(int maxBulkRequestSize) {
@@ -288,7 +324,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withMaxRetries(int maxRetries) {
@@ -301,7 +340,10 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       public Bound<T> withRetryPause(Duration retryPause) {
@@ -314,7 +356,58 @@ public class ElasticsearchIO {
             maxBulkRequestSize,
             maxRetries,
             retryPause,
-            error);
+            error,
+            enableSslAndAuth,
+            username,
+            password);
+      }
+
+      public Bound<T> enableSslAndAuthentication(boolean enableSslAndAuth) {
+        return new Bound<>(
+            clusterName,
+            servers,
+            flushInterval,
+            toDocWriteRequests,
+            numOfShard,
+            maxBulkRequestSize,
+            maxRetries,
+            retryPause,
+            error,
+            enableSslAndAuth,
+            username,
+            password);
+      }
+
+      public Bound<T> withUsername(@Nullable  final String username) {
+        return new Bound<>(
+            clusterName,
+            servers,
+            flushInterval,
+            toDocWriteRequests,
+            numOfShard,
+            maxBulkRequestSize,
+            maxRetries,
+            retryPause,
+            error,
+            enableSslAndAuth,
+            username,
+            password);
+      }
+
+      public Bound<T> withPassword(@Nullable  final String password) {
+        return new Bound<>(
+            clusterName,
+            servers,
+            flushInterval,
+            toDocWriteRequests,
+            numOfShard,
+            maxBulkRequestSize,
+            maxRetries,
+            retryPause,
+            error,
+            enableSslAndAuth,
+            username,
+            password);
       }
 
       @Override
@@ -349,7 +442,10 @@ public class ElasticsearchIO {
                         toDocWriteRequests,
                         error,
                         maxRetries,
-                        retryPause)));
+                        retryPause,
+                        enableSslAndAuth,
+                        username,
+                        password)));
         return PDone.in(input.getPipeline());
       }
     }
@@ -393,9 +489,13 @@ public class ElasticsearchIO {
           SerializableFunction<T, Iterable<DocWriteRequest<?>>> toDocWriteRequests,
           ThrowingConsumer<BulkExecutionException> error,
           int maxRetries,
-          Duration retryPause) {
+          Duration retryPause,
+          final boolean enableSslAndAuth,
+          @Nullable  final String username,
+          @Nullable final String password) {
         this.maxBulkRequestSize = maxBulkRequestSize;
-        this.clientSupplier = new ClientSupplier(clusterName, servers);
+        this.clientSupplier =
+            new ClientSupplier(clusterName, servers, enableSslAndAuth, username, password);
         this.toDocWriteRequests = toDocWriteRequests;
         this.error = error;
         this.maxRetries = maxRetries;
@@ -493,10 +593,21 @@ public class ElasticsearchIO {
       private final AtomicReference<Client> CLIENT = new AtomicReference<>();
       private final String clusterName;
       private final InetSocketAddress[] addresses;
+      private final boolean enableSslAndAuthtenication;
+      private final String username;
+      private final String password;
 
-      public ClientSupplier(final String clusterName, final InetSocketAddress[] addresses) {
+      public ClientSupplier(final String clusterName,
+                            final InetSocketAddress[] addresses,
+                            final boolean enableSslAndAuthtenication,
+                            @Nullable final String username,
+                            @Nullable final String password
+                            ) {
         this.clusterName = clusterName;
         this.addresses = addresses;
+        this.enableSslAndAuthtenication = enableSslAndAuthtenication;
+        this.username = username;
+        this.password = password;
       }
 
       @Override
@@ -504,20 +615,44 @@ public class ElasticsearchIO {
         if (CLIENT.get() == null) {
           synchronized (CLIENT) {
             if (CLIENT.get() == null) {
-              CLIENT.set(create(clusterName, addresses));
+              CLIENT.set(create(clusterName, addresses, enableSslAndAuthtenication, username, password));
             }
           }
         }
         return CLIENT.get();
       }
 
-      private TransportClient create(String clusterName, InetSocketAddress[] addresses) {
-        final Settings settings = Settings.builder().put("cluster.name", clusterName).build();
+      private TransportClient create(String clusterName,
+                                     InetSocketAddress[] addresses,
+                                     boolean enableSslAndAuthentication,
+                                     @Nullable final String username,
+                                     @Nullable final String password) {
+        final Settings.Builder settingsBuilder = Settings.builder()
+            .put("cluster.name", clusterName);
 
+        if (enableSslAndAuthentication) {
+          // Fixme all details should be propagated from the SCIO scala code...
+          settingsBuilder.put("client.transport.nodes_sampler_interval", "5s");
+          settingsBuilder.put("client.transport.sniff", false);
+          settingsBuilder.put("transport.tcp.compress", true);
+          settingsBuilder.put("xpack.security.transport.ssl.enabled", true);
+          settingsBuilder.put("request.headers.X-Found-Cluster", "${cluster.name}");
+          settingsBuilder.put(
+              "xpack.security.user",
+              System.getProperty("xpack.security.user", String.format("%s:%s", username, password))
+          );
+          settingsBuilder.put("xpack.security.transport.ssl.verification_mode", "full");
+        }
+
+        final Settings settings = settingsBuilder.build();
         TransportAddress[] transportAddresses =
             Arrays.stream(addresses).map(TransportAddress::new).toArray(TransportAddress[]::new);
 
-        return new PreBuiltTransportClient(settings).addTransportAddresses(transportAddresses);
+        if (enableSslAndAuthentication) {
+          return new PreBuiltXPackTransportClient(settings).addTransportAddresses(transportAddresses);
+        } else {
+          return new PreBuiltTransportClient(settings).addTransportAddresses(transportAddresses);
+        }
       }
     }
 

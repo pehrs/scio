@@ -61,6 +61,9 @@ final case class ElasticsearchIO[T](esOptions: ElasticsearchOptions) extends Sci
         .withMaxBulkRequestSize(params.maxBulkRequestSize)
         .withMaxRetries(params.retry.maxRetries)
         .withRetryPause(params.retry.retryPause)
+        .enableSslAndAuthentication(params.enableSslAndAuthentication)
+        .withUsername(params.username)
+        .withPassword(params.password)
         .withError(new beam.ThrowingConsumer[BulkExecutionException] {
           override def accept(t: BulkExecutionException): Unit =
             params.errorFn(t)
@@ -70,6 +73,7 @@ final case class ElasticsearchIO[T](esOptions: ElasticsearchOptions) extends Sci
   }
 
   override def tap(params: ReadP): Tap[Nothing] =
+    EmptyTap
     EmptyTap
 }
 
@@ -86,6 +90,9 @@ object ElasticsearchIO {
         maxRetries = WriteParam.DefaultMaxRetries,
         retryPause = WriteParam.DefaultRetryPause
       )
+    private[elasticsearch] val DefaultEnableSslAndAuthentication = false
+    private[elasticsearch] val DefaultUsername = null
+    private[elasticsearch] val DefaultPassword = null
   }
 
   final case class WriteParam[T] private (
@@ -94,7 +101,10 @@ object ElasticsearchIO {
     flushInterval: Duration = WriteParam.DefaultFlushInterval,
     numOfShards: Long = WriteParam.DefaultNumShards,
     maxBulkRequestSize: Int = WriteParam.DefaultMaxBulkRequestSize,
-    retry: RetryConfig = WriteParam.DefaultRetryConfig
+    retry: RetryConfig = WriteParam.DefaultRetryConfig,
+    enableSslAndAuthentication : Boolean = WriteParam.DefaultEnableSslAndAuthentication,
+    username: String = WriteParam.DefaultUsername,
+    password: String = WriteParam.DefaultPassword,
   )
 
   final case class RetryConfig(maxRetries: Int, retryPause: Duration)
